@@ -9,33 +9,10 @@ from wcferry.wxmsg import WxMsg
 from app.config import Settings
 from app.grok.client import GrokClient
 from app.memory import ConversationMemory
+from app.personal.common import RESET_KEYWORDS, split_message
+from app.wcf_connect import connect_wcf
 
 logger = logging.getLogger(__name__)
-
-RESET_KEYWORDS = {"重置", "清空", "新对话", "/new", "/reset", "reset"}
-
-
-def _split_message(text: str, limit: int = 1800) -> list[str]:
-    text = text.strip()
-    if len(text) <= limit:
-        return [text]
-
-    chunks: list[str] = []
-    current = ""
-    for paragraph in text.split("\n"):
-        candidate = f"{current}\n{paragraph}".strip() if current else paragraph
-        if len(candidate) <= limit:
-            current = candidate
-            continue
-        if current:
-            chunks.append(current)
-        while len(paragraph) > limit:
-            chunks.append(paragraph[:limit])
-            paragraph = paragraph[limit:]
-        current = paragraph
-    if current:
-        chunks.append(current)
-    return chunks
 
 
 def _extract_text(msg: WxMsg) -> str:
@@ -51,11 +28,10 @@ class PersonalWeChatBot:
         self._grok = GrokClient(settings)
         self._memory = ConversationMemory(max_turns=settings.max_history_turns)
         self._allowed = settings.allowed_set()
-        self._wcf = Wcf(
+        self._wcf = connect_wcf(
             host=settings.wcf_host,
             port=settings.wcf_port,
             debug=settings.wcf_host is None,
-            block=True,
         )
         self._self_wxid = self._wcf.get_self_wxid()
 
@@ -111,13 +87,14 @@ class PersonalWeChatBot:
             self._send_text(receiver, "对话已重置，我们可以重新开始。")
             return
 
+        self._send_text(receiver, "正在思考…")
         history = self._memory.get_messages(memory_key)
         answer = self._grok.chat(history, content)
 
         self._memory.append(memory_key, "user", content)
         self._memory.append(memory_key, "assistant", answer)
 
-        for chunk in _split_message(answer):
+        for chunk in split_message(answer):
             self._send_text(receiver, chunk)
 
     def _send_text(self, receiver: str, text: str) -> None:
@@ -138,7 +115,16 @@ def run_bot(settings: Settings) -> None:
         )
         raise SystemExit(1)
 
-    bot = PersonalWeChatBot(settings)
+    try:
+        bot = PersonalWeChatBot(settings)
+    except Exception as exc:
+        logger.error("连接微信失败: %s", exc)
+        logger.error(
+            "常见原因：1) 未登录 PC 微信 3.9.x；2) 误用了 Weixin 4.x；"
+            "3) 微信版本与 wcferry 不匹配。运行 scripts\\check_env.py 排查。"
+        )
+        raise SystemExit(1) from exc
+
     try:
         bot.run()
     finally:

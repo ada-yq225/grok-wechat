@@ -1,4 +1,10 @@
 httpx>=0.28.0
 pydantic-settings>=2.6.0
 python-dotenv>=1.0.1
+wxdb>=0.0.9
+pyautogui>=0.9.54
+pyperclip>=1.9.0
+pywin32>=308
+pywechat127>=1.9.8
 wcferry>=39.5.2.0
+neonize>=0.3.18

@@ -11,3 +11,9 @@ build/
 .ruff_cache/
 *.log
 .DS_Store
+wechat39/
+login_qrcode.png
+data/whatsapp/
+neonize.db
+whatsapp_qr.png
+terminals/
